@@ -1,10 +1,21 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 import '../models/task.dart';
 import '../models/user.dart';
+import 'performance_monitor.dart';
 
-class DatabaseService {
+class DatabaseService with PerformanceTrackingMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  
+  // Caching for performance optimization
+  final Map<String, StreamSubscription> _activeStreams = {};
+  final Map<String, List<Task>> _cachedTasks = {};
+  final Map<String, DateTime> _cacheTimestamps = {};
+  Timer? _cacheCleanupTimer;
+  
+  // Cache TTL in minutes
+  static const int _cacheTTLMinutes = 5;
 
   // Collections
   static const String _usersCollection = 'users';
@@ -108,30 +119,65 @@ class DatabaseService {
   Stream<List<Task>> getUserTasks(String userId) {
     debugPrint('DatabaseService: Getting tasks for user $userId');
     
-    return _firestore
+    // Check cache first
+    final cacheKey = 'user_tasks_$userId';
+    final cachedData = _getCachedTasks(cacheKey);
+    if (cachedData != null) {
+      debugPrint('Returning cached tasks: ${cachedData.length}');
+      return Stream.value(cachedData);
+    }
+    
+    // Cancel existing stream for this user to prevent memory leaks
+    _activeStreams[cacheKey]?.cancel();
+    
+    final streamController = StreamController<List<Task>>.broadcast();
+    
+    final subscription = _firestore
         .collection(_tasksCollection)
         .where('userId', isEqualTo: userId)
         .snapshots()
-        .map((snapshot) {
-      debugPrint('DatabaseService: Received ${snapshot.docs.length} task documents');
-      
-      final tasks = snapshot.docs.map((doc) {
-        try {
-          final task = Task.fromFirestore(doc);
-          debugPrint('Parsed task: ${task.title}');
-          return task;
-        } catch (e) {
-          debugPrint('Error parsing task document ${doc.id}: $e');
-          return null;
-        }
-      }).where((task) => task != null).cast<Task>().toList();
-      
-      // Sort by updatedAt in memory to avoid Firestore index issues
-      tasks.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-      
-      debugPrint('Successfully parsed ${tasks.length} tasks');
-      return tasks;
-    });
+        .listen(
+      (snapshot) {
+        debugPrint('DatabaseService: Received ${snapshot.docs.length} task documents');
+        
+        final tasks = snapshot.docs.map((doc) {
+          try {
+            final task = Task.fromFirestore(doc);
+            debugPrint('Parsed task: ${task.title}');
+            return task;
+          } catch (e) {
+            debugPrint('Error parsing task document ${doc.id}: $e');
+            return null;
+          }
+        }).where((task) => task != null).cast<Task>().toList();
+        
+        // Sort by updatedAt in memory to avoid Firestore index issues
+        tasks.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+        
+        // Update cache
+        _updateCache(cacheKey, tasks);
+        
+        debugPrint('Successfully parsed ${tasks.length} tasks');
+        streamController.add(tasks);
+        
+        // Record performance metrics
+        recordMetric('firebase_tasks', objectCount: tasks.length);
+      },
+      onError: (error) {
+        debugPrint('Error in getUserTasks stream: $error');
+        streamController.addError(error);
+      },
+    );
+    
+    _activeStreams[cacheKey] = subscription;
+    
+    // Clean up when stream is cancelled
+    streamController.onCancel = () {
+      subscription.cancel();
+      _activeStreams.remove(cacheKey);
+    };
+    
+    return streamController.stream;
   }
 
   Stream<List<Task>> getTasksByStatus(String userId, TaskStatus status) {
@@ -519,5 +565,61 @@ class DatabaseService {
         .doc('connected')
         .snapshots()
         .map((snapshot) => snapshot.exists && snapshot.data()?['connected'] == true);
+  }
+  
+  // Cache management methods
+  List<Task>? _getCachedTasks(String cacheKey) {
+    final timestamp = _cacheTimestamps[cacheKey];
+    if (timestamp != null) {
+      final age = DateTime.now().difference(timestamp);
+      if (age.inMinutes < _cacheTTLMinutes) {
+        return _cachedTasks[cacheKey];
+      } else {
+        // Cache expired, remove it
+        _cachedTasks.remove(cacheKey);
+        _cacheTimestamps.remove(cacheKey);
+      }
+    }
+    return null;
+  }
+  
+  void _updateCache(String cacheKey, List<Task> tasks) {
+    _cachedTasks[cacheKey] = List.unmodifiable(tasks);
+    _cacheTimestamps[cacheKey] = DateTime.now();
+    
+    // Start cleanup timer if not already running
+    _cacheCleanupTimer ??= Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _cleanupExpiredCache(),
+    );
+  }
+  
+  void _cleanupExpiredCache() {
+    final now = DateTime.now();
+    final expiredKeys = <String>[];
+    
+    for (final entry in _cacheTimestamps.entries) {
+      if (now.difference(entry.value).inMinutes >= _cacheTTLMinutes) {
+        expiredKeys.add(entry.key);
+      }
+    }
+    
+    for (final key in expiredKeys) {
+      _cachedTasks.remove(key);
+      _cacheTimestamps.remove(key);
+    }
+    
+    debugPrint('Cleaned up ${expiredKeys.length} expired cache entries');
+  }
+  
+  // Clean up resources
+  void dispose() {
+    for (final subscription in _activeStreams.values) {
+      subscription.cancel();
+    }
+    _activeStreams.clear();
+    _cachedTasks.clear();
+    _cacheTimestamps.clear();
+    _cacheCleanupTimer?.cancel();
   }
 }

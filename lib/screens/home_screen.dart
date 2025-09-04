@@ -18,11 +18,20 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  
+  // Performance optimization: Limit items per page
+  static const int _itemsPerPage = 20;
+  int _currentPage = 1;
+  bool _isLoadingMore = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    
+    // Setup scroll controller for lazy loading
+    _scrollController.addListener(_onScroll);
     
     // Load tasks when screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -39,7 +48,32 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void dispose() {
     _tabController.dispose();
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+  
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      _loadMoreTasks();
+    }
+  }
+  
+  void _loadMoreTasks() {
+    if (!_isLoadingMore) {
+      setState(() {
+        _isLoadingMore = true;
+        _currentPage++;
+      });
+      
+      // Simulate loading delay
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          setState(() {
+            _isLoadingMore = false;
+          });
+        }
+      });
+    }
   }
 
   void _onSearchChanged(String value) {
@@ -426,21 +460,46 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             
             if (authProvider.user != null) {
               taskProvider.loadTasks(authProvider.user!.id);
+              // Wait a bit to ensure the data is refreshed
+              await Future.delayed(const Duration(milliseconds: 500));
             }
           },
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: tasks.length,
-            itemBuilder: (context, index) {
-              final task = tasks[index];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: TaskItem(task: task),
-              );
-            },
-          ),
+          child: _buildOptimizedListView(tasks),
         );
       },
+    );
+  }
+  
+  Widget _buildOptimizedListView(List<Task> tasks) {
+    // Implement pagination for better performance
+    final itemsToShow = _currentPage * _itemsPerPage;
+    final displayTasks = tasks.take(itemsToShow).toList();
+    
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(16),
+      itemCount: displayTasks.length + (_isLoadingMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index >= displayTasks.length) {
+          // Loading indicator
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+        
+        final task = displayTasks[index];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: TaskItem(task: task),
+        );
+      },
+      // Add physics for better scrolling performance
+      physics: const BouncingScrollPhysics(),
+      // Cache extent for better performance
+      cacheExtent: 500,
     );
   }
 }

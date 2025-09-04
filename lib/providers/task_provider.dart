@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 import '../models/task.dart';
 import '../services/task_service.dart';
 import '../services/database_service.dart';
@@ -9,7 +10,17 @@ class TaskProvider with ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();
   final StorageService _storageService = StorageService();
   
-  List<Task> _tasks = [];
+  // Optimization: Use separate lists for different views
+  List<Task> _allTasks = [];
+  List<Task> _pendingTasks = [];
+  List<Task> _inProgressTasks = [];
+  List<Task> _completedTasks = [];
+  
+  // Caching and performance
+  final Map<String, List<Task>> _cachedFilteredTasks = {};
+  Timer? _debounceTimer;
+  StreamSubscription<List<Task>>? _tasksSubscription;
+  
   bool _isLoading = false;
   String? _error;
   TaskStatus? _filterStatus;
@@ -17,10 +28,18 @@ class TaskProvider with ChangeNotifier {
   String? _filterCategory;
   String _searchQuery = '';
   Map<String, dynamic> _analytics = {};
+  
+  // Performance optimization: Cache last query to avoid unnecessary rebuilds
+  String _lastUserId = '';
+  DateTime _lastLoadTime = DateTime(1970);
 
-  // Getters
-  List<Task> get tasks => _getFilteredTasks();
-  List<Task> get allTasks => _tasks;
+  // Optimized getters with caching
+  List<Task> get tasks => _getFilteredTasksOptimized();
+  List<Task> get allTasks => List.unmodifiable(_allTasks);
+  List<Task> get pendingTasks => List.unmodifiable(_pendingTasks);
+  List<Task> get inProgressTasks => List.unmodifiable(_inProgressTasks);
+  List<Task> get completedTasks => List.unmodifiable(_completedTasks);
+  
   bool get isLoading => _isLoading;
   String? get error => _error;
   TaskStatus? get filterStatus => _filterStatus;
@@ -28,14 +47,40 @@ class TaskProvider with ChangeNotifier {
   String? get filterCategory => _filterCategory;
   String get searchQuery => _searchQuery;
   Map<String, dynamic> get analytics => _analytics;
+  
+  // Performance counters
+  int get totalTasks => _allTasks.length;
+  int get pendingCount => _pendingTasks.length;
+  int get inProgressCount => _inProgressTasks.length;
+  int get completedCount => _completedTasks.length;
 
-  // Get filtered tasks based on current filters
-  List<Task> _getFilteredTasks() {
-    List<Task> filteredTasks = List.from(_tasks);
+  // Optimized filtered tasks with caching
+  List<Task> _getFilteredTasksOptimized() {
+    final cacheKey = '$_filterStatus-$_filterPriority-$_filterCategory-$_searchQuery';
+    
+    // Return cached result if available and valid
+    if (_cachedFilteredTasks.containsKey(cacheKey)) {
+      return _cachedFilteredTasks[cacheKey]!;
+    }
+    
+    List<Task> filteredTasks = List.from(_allTasks);
 
-    // Filter by status
+    // Filter by status (use pre-sorted lists for better performance)
     if (_filterStatus != null) {
-      filteredTasks = filteredTasks.where((task) => task.status == _filterStatus).toList();
+      switch (_filterStatus!) {
+        case TaskStatus.pending:
+          filteredTasks = List.from(_pendingTasks);
+          break;
+        case TaskStatus.inProgress:
+          filteredTasks = List.from(_inProgressTasks);
+          break;
+        case TaskStatus.completed:
+          filteredTasks = List.from(_completedTasks);
+          break;
+        case TaskStatus.cancelled:
+          filteredTasks = _allTasks.where((task) => task.status == TaskStatus.cancelled).toList();
+          break;
+      }
     }
 
     // Filter by priority
@@ -48,14 +93,22 @@ class TaskProvider with ChangeNotifier {
       filteredTasks = filteredTasks.where((task) => task.category == _filterCategory).toList();
     }
 
-    // Filter by search query
+    // Filter by search query (optimized with early exit)
     if (_searchQuery.isNotEmpty) {
+      final query = _searchQuery.toLowerCase();
       filteredTasks = filteredTasks.where((task) {
-        final titleMatch = task.title.toLowerCase().contains(_searchQuery.toLowerCase());
-        final descriptionMatch = task.description.toLowerCase().contains(_searchQuery.toLowerCase());
-        final tagMatch = task.tags.any((tag) => tag.toLowerCase().contains(_searchQuery.toLowerCase()));
-        return titleMatch || descriptionMatch || tagMatch;
+        return task.title.toLowerCase().contains(query) ||
+               task.description.toLowerCase().contains(query) ||
+               task.tags.any((tag) => tag.toLowerCase().contains(query));
       }).toList();
+    }
+
+    // Cache the result
+    _cachedFilteredTasks[cacheKey] = filteredTasks;
+    
+    // Limit cache size to prevent memory leaks
+    if (_cachedFilteredTasks.length > 10) {
+      _cachedFilteredTasks.clear();
     }
 
     return filteredTasks;
@@ -63,12 +116,12 @@ class TaskProvider with ChangeNotifier {
 
   // Get tasks by status
   List<Task> getTasksByStatus(TaskStatus status) {
-    return _tasks.where((task) => task.status == status).toList();
+    return _allTasks.where((task) => task.status == status).toList();
   }
 
   // Get overdue tasks
   List<Task> get overdueTasks {
-    return _tasks.where((task) => task.isOverdue).toList();
+    return _allTasks.where((task) => task.isOverdue).toList();
   }
 
   // Get tasks due today
@@ -77,7 +130,7 @@ class TaskProvider with ChangeNotifier {
     final today = DateTime(now.year, now.month, now.day);
     final tomorrow = today.add(const Duration(days: 1));
 
-    return _tasks.where((task) {
+    return _allTasks.where((task) {
       if (task.dueDate == null) return false;
       return task.dueDate!.isAfter(today) && task.dueDate!.isBefore(tomorrow);
     }).toList();
@@ -85,7 +138,7 @@ class TaskProvider with ChangeNotifier {
 
   // Get tasks due soon (within 24 hours)
   List<Task> get tasksDueSoon {
-    return _tasks.where((task) => task.isDueSoon).toList();
+    return _allTasks.where((task) => task.isDueSoon).toList();
   }
 
   // Set loading state
@@ -106,17 +159,30 @@ class TaskProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Load tasks for user using enhanced database service
+  // Optimized task loading with deduplication and caching
   void loadTasks(String userId) {
+    // Avoid duplicate loads
+    if (_lastUserId == userId && 
+        DateTime.now().difference(_lastLoadTime).inSeconds < 5 && 
+        !_allTasks.isEmpty) {
+      debugPrint('Skipping task reload - recent data available');
+      return;
+    }
+    
     _setLoading(true);
     _setError(null);
+    _lastUserId = userId;
+    _lastLoadTime = DateTime.now();
     
     debugPrint('Loading tasks for user: $userId');
     
-    _databaseService.getUserTasks(userId).listen(
+    // Cancel existing subscription to prevent memory leaks
+    _tasksSubscription?.cancel();
+    
+    _tasksSubscription = _databaseService.getUserTasks(userId).listen(
       (tasks) {
         debugPrint('Received ${tasks.length} tasks from database');
-        _tasks = tasks;
+        _updateTaskLists(tasks);
         _setLoading(false);
         notifyListeners();
       },
@@ -127,8 +193,19 @@ class TaskProvider with ChangeNotifier {
       },
     );
     
-    // Also load analytics
+    // Load analytics in background
     _loadAnalytics(userId);
+  }
+  
+  // Efficiently update task lists by status
+  void _updateTaskLists(List<Task> newTasks) {
+    _allTasks = newTasks;
+    _pendingTasks = newTasks.where((task) => task.status == TaskStatus.pending).toList();
+    _inProgressTasks = newTasks.where((task) => task.status == TaskStatus.inProgress).toList();
+    _completedTasks = newTasks.where((task) => task.status == TaskStatus.completed).toList();
+    
+    // Clear cache when data changes
+    _cachedFilteredTasks.clear();
   }
 
   // Load user analytics
@@ -244,7 +321,7 @@ class TaskProvider with ChangeNotifier {
     
     try {
       final searchResults = await _taskService.searchTasks(userId, query);
-      _tasks = searchResults;
+      _allTasks = searchResults;
       _setLoading(false);
       notifyListeners();
     } catch (e) {
@@ -269,17 +346,37 @@ class TaskProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  // Optimized search with debouncing
   void setSearchQuery(String query) {
-    _searchQuery = query;
-    notifyListeners();
+    // Cancel previous timer
+    _debounceTimer?.cancel();
+    
+    // Set timer for debounced search
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (_searchQuery != query) {
+        _searchQuery = query;
+        _cachedFilteredTasks.clear(); // Clear cache when search changes
+        notifyListeners();
+      }
+    });
   }
 
-  // Clear all filters
+  // Memory management and cleanup
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    _tasksSubscription?.cancel();
+    _cachedFilteredTasks.clear();
+    super.dispose();
+  }
+  
+  // Clear all filters with cache cleanup
   void clearFilters() {
     _filterStatus = null;
     _filterPriority = null;
     _filterCategory = null;
     _searchQuery = '';
+    _cachedFilteredTasks.clear();
     notifyListeners();
   }
 
@@ -366,7 +463,7 @@ class TaskProvider with ChangeNotifier {
     
     try {
       await _taskService.deleteAllUserTasks(userId);
-      _tasks.clear();
+      _allTasks.clear();
       _setLoading(false);
       notifyListeners();
       return true;

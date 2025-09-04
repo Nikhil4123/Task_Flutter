@@ -1,0 +1,126 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // User collection rules
+    match /users/{userId} {
+      // Users can read and write their own profile
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Validate user data structure
+      allow create, update: if request.auth != null 
+        && request.auth.uid == userId
+        && validateUserData(request.resource.data);
+    }
+    
+    // Tasks collection rules
+    match /tasks/{taskId} {
+      // Users can read/write their own tasks
+      allow read, write: if request.auth != null 
+        && resource.data.userId == request.auth.uid;
+      
+      // Users can create tasks assigned to themselves
+      allow create: if request.auth != null 
+        && request.auth.uid == request.resource.data.userId
+        && validateTaskData(request.resource.data);
+        
+      // Validate task updates
+      allow update: if request.auth != null 
+        && resource.data.userId == request.auth.uid
+        && validateTaskData(request.resource.data)
+        && request.resource.data.userId == resource.data.userId; // Prevent userId changes
+    }
+    
+    // Categories collection rules
+    match /categories/{categoryId} {
+      // Users can manage their own categories
+      allow read, write: if request.auth != null 
+        && resource.data.userId == request.auth.uid;
+      
+      allow create: if request.auth != null 
+        && request.auth.uid == request.resource.data.userId
+        && validateCategoryData(request.resource.data);
+    }
+    
+    // Analytics collection rules
+    match /analytics/{userId} {
+      // Users can read/write their own analytics
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Validate analytics data
+      allow create, update: if request.auth != null 
+        && request.auth.uid == userId
+        && validateAnalyticsData(request.resource.data);
+    }
+    
+    // Shared/Team tasks (for future features)
+    match /shared_tasks/{taskId} {
+      // Allow read if user is in the allowed users list
+      allow read: if request.auth != null 
+        && (resource.data.userId == request.auth.uid 
+            || request.auth.uid in resource.data.sharedWith);
+      
+      // Only owner can update/delete
+      allow write: if request.auth != null 
+        && resource.data.userId == request.auth.uid;
+        
+      // Anyone can create but must be the owner
+      allow create: if request.auth != null 
+        && request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Validation functions
+    function validateUserData(data) {
+      return data.keys().hasAll(['id', 'email', 'displayName']) &&
+             data.id is string &&
+             data.email is string &&
+             data.displayName is string &&
+             data.email.matches('.*@.*\\..*'); // Basic email validation
+    }
+    
+    function validateTaskData(data) {
+      return data.keys().hasAll(['title', 'description', 'userId', 'status', 'priority']) &&
+             data.title is string &&
+             data.description is string &&
+             data.userId is string &&
+             data.status in ['pending', 'inProgress', 'completed', 'cancelled'] &&
+             data.priority in ['low', 'medium', 'high', 'urgent'] &&
+             data.title.size() > 0 && data.title.size() <= 200 &&
+             data.description.size() <= 1000 &&
+             (data.tags is list ? data.tags.size() <= 20 : true) &&
+             (data.progress is number ? data.progress >= 0.0 && data.progress <= 1.0 : true);
+    }
+    
+    function validateCategoryData(data) {
+      return data.keys().hasAll(['userId', 'name']) &&
+             data.userId is string &&
+             data.name is string &&
+             data.name.size() > 0 && data.name.size() <= 50;
+    }
+    
+    function validateAnalyticsData(data) {
+      return data.keys().hasAll(['userId']) &&
+             data.userId is string &&
+             (data.tasksCreated is number ? data.tasksCreated >= 0 : true) &&
+             (data.tasksCompleted is number ? data.tasksCompleted >= 0 : true) &&
+             (data.tasksDeleted is number ? data.tasksDeleted >= 0 : true);
+    }
+    
+    // Admin-only collections (for future admin features)
+    match /admin/{document=**} {
+      allow read, write: if request.auth != null 
+        && request.auth.token.admin == true;
+    }
+    
+    // Public collections (read-only)
+    match /public/{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+    
+    // System collections (no direct access)
+    match /system/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

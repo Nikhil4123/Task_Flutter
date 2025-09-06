@@ -1,14 +1,17 @@
 import 'package:flutter/foundation.dart';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import '../models/task.dart';
 import '../services/task_service.dart';
 import '../services/database_service.dart';
 import '../services/storage_service.dart';
+import '../services/notification_service.dart';
 
 class TaskProvider with ChangeNotifier {
   final TaskService _taskService = TaskService();
   final DatabaseService _databaseService = DatabaseService();
   final StorageService _storageService = StorageService();
+  final NotificationService _notificationService = NotificationService();
   
   // Optimization: Use separate lists for different views
   List<Task> _allTasks = [];
@@ -225,6 +228,12 @@ class TaskProvider with ChangeNotifier {
     
     try {
       await _databaseService.createTask(task);
+      
+      // Schedule reminder notification if task has due date
+      if (task.dueDate != null) {
+        await _notificationService.scheduleTaskReminder(task);
+      }
+      
       _setLoading(false);
       return true;
     } catch (e) {
@@ -240,7 +249,14 @@ class TaskProvider with ChangeNotifier {
     _setError(null);
     
     try {
-      await _taskService.updateTask(task);
+      await _databaseService.updateTask(task);
+      
+      // Cancel existing reminder and reschedule if due date exists
+      await _notificationService.cancelTaskReminder(task.id);
+      if (task.dueDate != null && task.status != TaskStatus.completed) {
+        await _notificationService.scheduleTaskReminder(task);
+      }
+      
       _setLoading(false);
       return true;
     } catch (e) {
@@ -256,7 +272,11 @@ class TaskProvider with ChangeNotifier {
     _setError(null);
     
     try {
-      await _taskService.deleteTask(taskId);
+      await _databaseService.deleteTask(taskId);
+      
+      // Cancel any pending notifications for this task
+      await _notificationService.cancelTaskReminder(taskId);
+      
       _setLoading(false);
       return true;
     } catch (e) {
@@ -272,11 +292,49 @@ class TaskProvider with ChangeNotifier {
     _setError(null);
     
     try {
-      await _taskService.completeTask(taskId);
+      debugPrint('TaskProvider: Attempting to complete task $taskId');
+      
+      // Cancel reminder notification first
+      await _notificationService.cancelTaskReminder(taskId);
+      debugPrint('TaskProvider: Notification cancelled for task $taskId');
+      
+      // Update database
+      await _databaseService.completeTask(taskId);
+      debugPrint('TaskProvider: Task completed in database');
+      
+      // Find the completed task and show completion notification
+      final task = _allTasks.firstWhere((t) => t.id == taskId, orElse: () => Task(
+        id: taskId,
+        title: 'Task',
+        description: '',
+        createdAt: DateTime.now(),
+        priority: TaskPriority.medium,
+        status: TaskStatus.completed,
+        userId: '',
+        tags: [],
+        attachments: [],
+        subtasks: [],
+        updatedAt: DateTime.now(),
+      ));
+      
+      await _notificationService.showTaskCompletionNotification(task);
+      debugPrint('TaskProvider: Completion notification shown');
+      
       _setLoading(false);
       return true;
     } catch (e) {
-      _setError('Failed to complete task: ${e.toString()}');
+      debugPrint('TaskProvider: Error completing task: $e');
+      String errorMessage = 'Failed to complete task';
+      
+      if (e.toString().contains('permission-denied')) {
+        errorMessage = 'Permission denied. Please check your account permissions.';
+      } else if (e.toString().contains('not found')) {
+        errorMessage = 'Task not found. It may have been deleted.';
+      } else if (e.toString().contains('network')) {
+        errorMessage = 'Network error. Please check your internet connection.';
+      }
+      
+      _setError('$errorMessage: ${e.toString()}');
       _setLoading(false);
       return false;
     }
@@ -288,11 +346,24 @@ class TaskProvider with ChangeNotifier {
     _setError(null);
     
     try {
-      await _taskService.updateTaskStatus(taskId, status);
+      debugPrint('TaskProvider: Attempting to update task status $taskId to $status');
+      await _databaseService.updateTaskStatus(taskId, status);
+      debugPrint('TaskProvider: Task status updated successfully');
       _setLoading(false);
       return true;
     } catch (e) {
-      _setError('Failed to update task status: ${e.toString()}');
+      debugPrint('TaskProvider: Error updating task status: $e');
+      String errorMessage = 'Failed to update task status';
+      
+      if (e.toString().contains('permission-denied')) {
+        errorMessage = 'Permission denied. Please check your account permissions.';
+      } else if (e.toString().contains('not found')) {
+        errorMessage = 'Task not found. It may have been deleted.';
+      } else if (e.toString().contains('network')) {
+        errorMessage = 'Network error. Please check your internet connection.';
+      }
+      
+      _setError('$errorMessage: ${e.toString()}');
       _setLoading(false);
       return false;
     }
@@ -304,7 +375,10 @@ class TaskProvider with ChangeNotifier {
     _setError(null);
     
     try {
-      await _taskService.updateTaskPriority(taskId, priority);
+      // Get the existing task first
+      final existingTask = _allTasks.firstWhere((task) => task.id == taskId);
+      final updatedTask = existingTask.copyWith(priority: priority);
+      await _databaseService.updateTask(updatedTask);
       _setLoading(false);
       return true;
     } catch (e) {

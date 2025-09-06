@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart' as app_auth;
+import '../widgets/app_logo.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -111,6 +113,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       body: SafeArea(
         child: Consumer<app_auth.AuthProvider>(
           builder: (context, authProvider, child) {
@@ -122,25 +125,28 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 60),
                   
                   // App logo/title
-                  Icon(
-                    Icons.task_alt,
-                    size: 80,
-                    color: Theme.of(context).primaryColor,
+                  const AppLogo(
+                    size: 120,
+                    showBackground: true,
+                    showShadow: true,
+                    borderRadius: 20,
                   ),
                   const SizedBox(height: 16),
-                  Text(
+                  const Text(
                     'Task Manager',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    style: TextStyle(
+                      fontSize: 32,
                       fontWeight: FontWeight.bold,
-                      color: Theme.of(context).primaryColor,
+                      color: Colors.white,
                     ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Organize your tasks efficiently',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Colors.grey[600],
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey[400],
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -155,10 +161,25 @@ class _LoginScreenState extends State<LoginScreen> {
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
-                          decoration: const InputDecoration(
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
                             labelText: 'Email',
-                            prefixIcon: Icon(Icons.email),
-                            border: OutlineInputBorder(),
+                            labelStyle: const TextStyle(color: Colors.white),
+                            prefixIcon: const Icon(Icons.email, color: Colors.white),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(color: Colors.grey[700]!),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(color: Colors.grey[700]!),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(color: Colors.purple),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey[800],
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {

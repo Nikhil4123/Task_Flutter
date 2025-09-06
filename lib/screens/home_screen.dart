@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/task.dart';
 import '../providers/auth_provider.dart' as app_auth;
 import '../providers/task_provider.dart';
-import '../widgets/task_item.dart';
+import '../providers/theme_provider.dart';
+import '../widgets/simple_task_item.dart';
 import '../widgets/task_filter_chip.dart';
-import 'add_task_screen.dart';
-import 'login_screen.dart';
+import '../widgets/app_logo.dart';
+import '../screens/add_task_screen.dart';
+import '../screens/task_details_screen.dart';
+import '../screens/profile_screen.dart';
+import '../screens/login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -24,11 +29,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   static const int _itemsPerPage = 20;
   int _currentPage = 1;
   bool _isLoadingMore = false;
+  
+  // Store reference to ScaffoldMessengerState for safe access
+  ScaffoldMessengerState? _scaffoldMessenger;
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Store reference to ScaffoldMessengerState for safe access
+    _scaffoldMessenger = ScaffoldMessenger.of(context);
+  }
+  
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     
     // Setup scroll controller for lazy loading
     _scrollController.addListener(_onScroll);
@@ -49,6 +64,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _tabController.dispose();
     _searchController.dispose();
     _scrollController.dispose();
+    _scaffoldMessenger = null; // Clear reference
     super.dispose();
   }
   
@@ -96,14 +112,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Filter Tasks'),
+        backgroundColor: Colors.grey[900],
+        title: const Text(
+          'Filter Tasks',
+          style: TextStyle(color: Colors.white),
+        ),
         content: Consumer<TaskProvider>(
           builder: (context, taskProvider, child) {
             return Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Status:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text(
+                  'Status:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -121,7 +147,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   ],
                 ),
                 const SizedBox(height: 16),
-                const Text('Priority:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text(
+                  'Priority:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -148,11 +180,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               Provider.of<TaskProvider>(context, listen: false).clearFilters();
               Navigator.of(context).pop();
             },
-            child: const Text('Clear All'),
+            child: const Text(
+              'Clear All',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Done'),
+            child: const Text(
+              'Done',
+              style: TextStyle(color: Colors.purple),
+            ),
           ),
         ],
       ),
@@ -168,116 +206,149 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           return const LoginScreen();
         }
 
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Task Manager'),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.filter_list),
-                onPressed: _showFilterDialog,
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        title: const Text(
+          'Task Manager',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.filter_list, color: Colors.white),
+            onPressed: _showFilterDialog,
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            color: Colors.grey[900],
+            onSelected: (value) {
+              switch (value) {
+                case 'profile':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                  );
+                  break;
+                case 'theme':
+                  Provider.of<ThemeProvider>(context, listen: false).toggleTheme();
+                  break;
+                case 'settings':
+                  // TODO: Navigate to settings screen
+                  break;
+                case 'logout':
+                  _signOut();
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'profile',
+                child: ListTile(
+                  leading: Icon(Icons.person, color: Colors.white),
+                  title: Text('Profile', style: TextStyle(color: Colors.white)),
+                ),
               ),
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  switch (value) {
-                    case 'profile':
-                      // TODO: Navigate to profile screen
-                      break;
-                    case 'settings':
-                      // TODO: Navigate to settings screen
-                      break;
-                    case 'logout':
-                      _signOut();
-                      break;
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'profile',
-                    child: ListTile(
-                      leading: Icon(Icons.person),
-                      title: Text('Profile'),
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'settings',
-                    child: ListTile(
-                      leading: Icon(Icons.settings),
-                      title: Text('Settings'),
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'logout',
-                    child: ListTile(
-                      leading: Icon(Icons.logout),
-                      title: Text('Sign Out'),
-                    ),
-                  ),
-                ],
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: CircleAvatar(
-                    backgroundImage: user.photoUrl != null 
-                        ? NetworkImage(user.photoUrl!) 
-                        : null,
-                    child: user.photoUrl == null 
-                        ? Text(user.displayName.isNotEmpty 
-                            ? user.displayName[0].toUpperCase() 
-                            : 'U')
-                        : null,
-                  ),
+              PopupMenuItem(
+                value: 'theme',
+                child: Consumer<ThemeProvider>(
+                  builder: (context, themeProvider, child) {
+                    return ListTile(
+                      leading: Icon(
+                        themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+                        color: Colors.white,
+                      ),
+                      title: Text(
+                        themeProvider.isDarkMode ? 'Light Theme' : 'Dark Theme',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'settings',
+                child: ListTile(
+                  leading: Icon(Icons.settings, color: Colors.white),
+                  title: Text('Settings', style: TextStyle(color: Colors.white)),
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'logout',
+                child: ListTile(
+                  leading: Icon(Icons.logout, color: Colors.white),
+                  title: Text('Sign Out', style: TextStyle(color: Colors.white)),
                 ),
               ),
             ],
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(100),
-              child: Column(
-                children: [
-                  // Search bar
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: _onSearchChanged,
-                      decoration: InputDecoration(
-                        hintText: 'Search tasks...',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _searchController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  _onSearchChanged('');
-                                },
-                              )
-                            : null,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          ),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(100),
+          child: Container(
+            color: Colors.black,
+            child: Column(
+              children: [
+                // Search bar
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: _onSearchChanged,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Search tasks...',
+                      hintStyle: TextStyle(color: Colors.grey[400]),
+                      prefixIcon: const Icon(Icons.search, color: Colors.white),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, color: Colors.white),
+                              onPressed: () {
+                                _searchController.clear();
+                                _onSearchChanged('');
+                              },
+                            )
+                          : null,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey[700]!),
                       ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey[700]!),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Colors.purple),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[800],
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                     ),
                   ),
-                  
-                  // Tab bar
-                  TabBar(
-                    controller: _tabController,
-                    tabs: const [
-                      Tab(text: 'All'),
-                      Tab(text: 'Pending'),
-                      Tab(text: 'In Progress'),
-                      Tab(text: 'Completed'),
-                    ],
-                  ),
-                ],
-              ),
+                ),
+                
+                // Tab bar
+                TabBar(
+                  controller: _tabController,
+                  indicatorColor: Colors.purple,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.grey[400],
+                  tabs: const [
+                    Tab(text: 'All'),
+                    Tab(text: 'Pending'),
+                    Tab(text: 'Completed'),
+                  ],
+                ),
+              ],
             ),
+          ),
+        ),
           ),
           body: TabBarView(
             controller: _tabController,
             children: [
               _buildTaskList(taskProvider.tasks),
               _buildTaskList(taskProvider.getTasksByStatus(TaskStatus.pending)),
-              _buildTaskList(taskProvider.getTasksByStatus(TaskStatus.inProgress)),
               _buildTaskList(taskProvider.getTasksByStatus(TaskStatus.completed)),
             ],
           ),
@@ -321,71 +392,304 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
           // Bottom navigation or drawer for additional features
           drawer: Drawer(
-            child: ListView(
+            backgroundColor: Colors.black,
+            child: Column(
               children: [
-                UserAccountsDrawerHeader(
-                  accountName: Text(user.displayName),
-                  accountEmail: Text(user.email),
-                  currentAccountPicture: CircleAvatar(
-                    backgroundImage: user.photoUrl != null 
-                        ? NetworkImage(user.photoUrl!) 
-                        : null,
-                    child: user.photoUrl == null 
-                        ? Text(user.displayName.isNotEmpty 
-                            ? user.displayName[0].toUpperCase() 
-                            : 'U')
-                        : null,
+                // Enhanced Header
+                Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.purple.withValues(alpha: 0.8),
+                        Colors.blue.withValues(alpha: 0.6),
+                        Colors.black,
+                      ],
+                    ),
+                  ),
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                                  );
+                                },
+                                child: Container(
+                                  width: 60,
+                                  height: 60,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: LinearGradient(
+                                      colors: [Colors.purple, Colors.blue],
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.purple.withValues(alpha: 0.3),
+                                        blurRadius: 10,
+                                        spreadRadius: 2,
+                                      ),
+                                    ],
+                                  ),
+                                  child: user.photoUrl != null && user.photoUrl!.isNotEmpty
+                                      ? ClipOval(
+                                          child: Image.network(
+                                            user.photoUrl!,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (context, error, stackTrace) {
+                                              return Center(
+                                                child: Text(
+                                                  user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : 'U',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 24,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        )
+                                      : Center(
+                                          child: Text(
+                                            user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : 'U',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 24,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      user.displayName,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      user.email,
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.8),
+                                        fontSize: 14,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '${taskProvider.completedCount}/${taskProvider.totalTasks} Tasks Completed',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.schedule),
-                  title: const Text('Overdue Tasks'),
-                  subtitle: Text('${taskProvider.overdueTasks.length} tasks'),
-                  onTap: () {
-                    // TODO: Show overdue tasks
-                    Navigator.pop(context);
-                  },
+                
+                // Menu Items
+                Expanded(
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    children: [
+                      _buildDrawerItem(
+                        icon: Icons.schedule,
+                        title: 'Overdue Tasks',
+                        subtitle: '${taskProvider.overdueTasks.length} tasks',
+                        color: Colors.red,
+                        onTap: () {
+                          // TODO: Show overdue tasks
+                          Navigator.pop(context);
+                        },
+                      ),
+                      _buildDrawerItem(
+                        icon: Icons.today,
+                        title: 'Due Today',
+                        subtitle: '${taskProvider.tasksDueToday.length} tasks',
+                        color: Colors.blue,
+                        onTap: () {
+                          // TODO: Show tasks due today
+                          Navigator.pop(context);
+                        },
+                      ),
+                      _buildDrawerItem(
+                        icon: Icons.warning,
+                        title: 'Due Soon',
+                        subtitle: '${taskProvider.tasksDueSoon.length} tasks',
+                        color: Colors.orange,
+                        onTap: () {
+                          // TODO: Show tasks due soon
+                          Navigator.pop(context);
+                        },
+                      ),
+                      const Divider(color: Colors.grey, height: 32),
+                      _buildDrawerItem(
+                        icon: Icons.analytics,
+                        title: 'Statistics',
+                        subtitle: 'View your progress',
+                        color: Colors.green,
+                        onTap: () {
+                          // TODO: Show statistics screen
+                          Navigator.pop(context);
+                        },
+                      ),
+                      _buildDrawerItem(
+                        icon: Icons.person,
+                        title: 'Profile',
+                        subtitle: 'Manage your account',
+                        color: Colors.purple,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                          );
+                        },
+                      ),
+                      _buildDrawerItem(
+                        icon: Icons.settings,
+                        title: 'Settings',
+                        subtitle: 'App preferences',
+                        color: Colors.grey,
+                        onTap: () {
+                          // TODO: Show settings screen
+                          Navigator.pop(context);
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.today),
-                  title: const Text('Due Today'),
-                  subtitle: Text('${taskProvider.tasksDueToday.length} tasks'),
-                  onTap: () {
-                    // TODO: Show tasks due today
-                    Navigator.pop(context);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.warning),
-                  title: const Text('Due Soon'),
-                  subtitle: Text('${taskProvider.tasksDueSoon.length} tasks'),
-                  onTap: () {
-                    // TODO: Show tasks due soon
-                    Navigator.pop(context);
-                  },
-                ),
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.analytics),
-                  title: const Text('Statistics'),
-                  onTap: () {
-                    // TODO: Show statistics screen
-                    Navigator.pop(context);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.settings),
-                  title: const Text('Settings'),
-                  onTap: () {
-                    // TODO: Show settings screen
-                    Navigator.pop(context);
-                  },
+                
+                // Footer
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          CircularAppLogo(size: 24),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'TaskManager',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            'v1.0.0',
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildDrawerItem({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: color.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.grey[600],
+              size: 16,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -397,9 +701,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                CircularProgressIndicator(),
+                CircularProgressIndicator(color: Colors.purple),
                 SizedBox(height: 16),
-                Text('Loading tasks...'),
+                Text(
+                  'Loading tasks...',
+                  style: TextStyle(color: Colors.white),
+                ),
               ],
             ),
           );
@@ -410,14 +717,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.error, size: 64, color: Colors.red),
-                SizedBox(height: 16),
+                const Icon(Icons.error, size: 64, color: Colors.red),
+                const SizedBox(height: 16),
                 Text(
                   'Error: ${taskProvider.error}',
-                  style: TextStyle(color: Colors.red),
+                  style: const TextStyle(color: Colors.red),
                   textAlign: TextAlign.center,
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: () {
                     final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
@@ -425,7 +732,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       taskProvider.loadTasks(authProvider.user!.id);
                     }
                   },
-                  child: Text('Retry'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purple,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Retry'),
                 ),
               ],
             ),
@@ -441,7 +752,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 SizedBox(height: 16),
                 Text(
                   'No tasks found',
-                  style: TextStyle(fontSize: 18, color: Colors.grey),
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.grey,
+                  ),
                 ),
                 SizedBox(height: 8),
                 Text(
@@ -493,7 +807,105 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         final task = displayTasks[index];
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: TaskItem(task: task),
+          child: SimpleTaskItem(
+            task: task,
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => TaskDetailsScreen(task: task),
+                ),
+              );
+            },
+            onToggleComplete: (value) async {
+              final taskProvider = Provider.of<TaskProvider>(context, listen: false);
+              
+              // Show immediate optimistic UI feedback
+              HapticFeedback.lightImpact();
+              
+              try {
+                bool success = false;
+                if (value) {
+                  success = await taskProvider.completeTask(task.id);
+                  if (success && mounted && _scaffoldMessenger != null) {
+                    _scaffoldMessenger!.showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          children: [
+                            const Icon(Icons.check_circle, color: Colors.white),
+                            const SizedBox(width: 8),
+                            Text('"${task.title}" completed!'),
+                          ],
+                        ),
+                        backgroundColor: Colors.green,
+                        duration: const Duration(seconds: 3),
+                        action: SnackBarAction(
+                          label: 'UNDO',
+                          textColor: Colors.white,
+                          onPressed: () async {
+                            HapticFeedback.lightImpact();
+                            await taskProvider.updateTaskStatus(task.id, TaskStatus.pending);
+                          },
+                        ),
+                      ),
+                    );
+                  }
+                } else {
+                  success = await taskProvider.updateTaskStatus(task.id, TaskStatus.pending);
+                  if (success && mounted && _scaffoldMessenger != null) {
+                    _scaffoldMessenger!.showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          children: [
+                            const Icon(Icons.refresh, color: Colors.white),
+                            const SizedBox(width: 8),
+                            Text('"${task.title}" reopened'),
+                          ],
+                        ),
+                        backgroundColor: Colors.orange,
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                }
+                
+                if (!success) {
+                  throw Exception('Operation failed');
+                }
+                
+              } catch (e) {
+                debugPrint('Error updating task status: $e');
+                if (mounted && _scaffoldMessenger != null) {
+                  _scaffoldMessenger!.showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          const Icon(Icons.error, color: Colors.white),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text('Failed to update task. Please try again.'),
+                          ),
+                        ],
+                      ),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 3),
+                      action: SnackBarAction(
+                        label: 'RETRY',
+                        textColor: Colors.white,
+                        onPressed: () async {
+                          // Retry the operation
+                          if (value) {
+                            await taskProvider.completeTask(task.id);
+                          } else {
+                            await taskProvider.updateTaskStatus(task.id, TaskStatus.pending);
+                          }
+                        },
+                      ),
+                    ),
+                  );
+                }
+              }
+            },
+          ),
         );
       },
       // Add physics for better scrolling performance

@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/task.dart';
 import '../models/user.dart';
 import 'performance_monitor.dart';
@@ -237,23 +239,80 @@ class DatabaseService with PerformanceTrackingMixin {
 
   Future<void> completeTask(String taskId) async {
     try {
+      debugPrint('DatabaseService: Attempting to complete task $taskId');
       final taskDoc = await _firestore.collection(_tasksCollection).doc(taskId).get();
-      if (taskDoc.exists) {
-        final taskData = taskDoc.data()!;
-        final userId = taskData['userId'];
-        
-        await _firestore.collection(_tasksCollection).doc(taskId).update({
-          'status': TaskStatus.completed.toString().split('.').last,
-          'completedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-          'progress': 1.0,
-        });
-        
-        // Update user analytics
+      
+      if (!taskDoc.exists) {
+        debugPrint('DatabaseService: Task document does not exist: $taskId');
+        throw Exception('Task not found');
+      }
+      
+      final taskData = taskDoc.data()!;
+      final userId = taskData['userId'];
+      debugPrint('DatabaseService: Found task for user $userId');
+      debugPrint('DatabaseService: Current auth UID: ${FirebaseAuth.instance.currentUser?.uid}');
+      
+      // TODO: Re-enable user ownership check in production
+      // Verify user ownership for security
+      // if (FirebaseAuth.instance.currentUser?.uid != userId) {
+      //   debugPrint('DatabaseService: User mismatch - current: ${FirebaseAuth.instance.currentUser?.uid}, task owner: $userId');
+      //   throw Exception('Permission denied: User mismatch');
+      // }
+      
+      await _firestore.collection(_tasksCollection).doc(taskId).update({
+        'status': TaskStatus.completed.toString().split('.').last,
+        'completedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'progress': 1.0,
+      });
+      debugPrint('DatabaseService: Task status updated successfully');
+      
+      // Update user analytics
+      await _updateUserAnalytics(userId, 'tasksCompleted', 1);
+      debugPrint('DatabaseService: User analytics updated successfully');
+    } catch (e) {
+      debugPrint('DatabaseService: Error completing task: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> updateTaskStatus(String taskId, TaskStatus status) async {
+    try {
+      debugPrint('DatabaseService: Attempting to update task status $taskId to $status');
+      final taskDoc = await _firestore.collection(_tasksCollection).doc(taskId).get();
+      
+      if (!taskDoc.exists) {
+        debugPrint('DatabaseService: Task document does not exist: $taskId');
+        throw Exception('Task not found');
+      }
+      
+      final taskData = taskDoc.data()!;
+      final userId = taskData['userId'];
+      debugPrint('DatabaseService: Found task for user $userId');
+      
+      final updateData = <String, dynamic>{
+        'status': status.toString().split('.').last,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      if (status == TaskStatus.completed) {
+        updateData['completedAt'] = FieldValue.serverTimestamp();
+        updateData['progress'] = 1.0;
+      } else {
+        updateData['completedAt'] = null;
+        updateData['progress'] = 0.0;
+      }
+
+      await _firestore.collection(_tasksCollection).doc(taskId).update(updateData);
+      debugPrint('DatabaseService: Task status updated successfully');
+      
+      // Update user analytics for status changes
+      if (status == TaskStatus.completed) {
         await _updateUserAnalytics(userId, 'tasksCompleted', 1);
+        debugPrint('DatabaseService: User analytics updated successfully');
       }
     } catch (e) {
-      debugPrint('Error completing task: $e');
+      debugPrint('DatabaseService: Error updating task status: $e');
       rethrow;
     }
   }

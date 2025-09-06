@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart' as app_auth;
 import 'providers/task_provider.dart';
+import 'providers/theme_provider.dart';
 import 'services/notification_service.dart';
 import 'services/performance_monitor.dart';
 import 'services/memory_optimizer.dart';
@@ -60,22 +61,16 @@ void main() async {
 // Configure Firebase for optimal performance
 Future<void> _configureFirebase() async {
   try {
-    final config = EnvironmentConfig.firebaseConfig;
-    
-    // Configure Firestore settings
+    // Configure Firestore settings for mobile
     final firestore = FirebaseFirestore.instance;
     
-    if (config['persistenceEnabled'] == true) {
-      await firestore.enablePersistence();
-    }
-    
-    // Set cache size
-    firestore.settings = Settings(
-      cacheSizeBytes: config['cacheSizeBytes'],
-      persistenceEnabled: config['persistenceEnabled'],
+    // Set basic cache settings for better performance
+    firestore.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
     );
     
-    debugPrint('Firebase configured for ${EnvironmentConfig.current}');
+    debugPrint('Firebase configured successfully');
   } catch (e) {
     debugPrint('Firebase configuration error: $e');
   }
@@ -87,10 +82,7 @@ Future<void> _configureFirebaseAuth() async {
     // Set language code to avoid locale issues
     await FirebaseAuth.instance.setLanguageCode('en');
     
-    // Configure Auth settings for Android
-    if (!kIsWeb) {
-      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
-    }
+    debugPrint('Firebase Auth configured successfully');
   } catch (e) {
     debugPrint('Firebase Auth configuration error: $e');
   }
@@ -105,82 +97,40 @@ class TaskManagerApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => app_auth.AuthProvider()..initialize()),
         ChangeNotifierProvider(create: (_) => TaskProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
-      child: MaterialApp(
-        title: AppConfig.appName,
-        debugShowCheckedModeBanner: false,
-        
-        // Performance optimizations
-        builder: (context, child) {
-          return child!;
-        },
-        
-        theme: _buildTheme(),
-        home: Consumer<app_auth.AuthProvider>(
-          builder: (context, authProvider, child) {
-            // Show loading while checking authentication state
-            if (authProvider.isLoading) {
-              return const Scaffold(
-                body: Center(
-                  child: CircularProgressIndicator(),
-                ),
-              );
-            }
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          return MaterialApp(
+            title: AppConfig.appName,
+            debugShowCheckedModeBanner: false,
             
-            // Navigate based on authentication state
-            return authProvider.isAuthenticated 
-                ? const HomeScreen() 
-                : const LoginScreen();
-          },
-        ),
-      ),
-    );
-  }
-  
-  ThemeData _buildTheme() {
-    return ThemeData(
-      primarySwatch: Colors.blue,
-      primaryColor: Colors.blue[600],
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: Colors.blue,
-        brightness: Brightness.light,
-      ),
-      useMaterial3: true,
-      
-      // Performance optimizations
-      visualDensity: VisualDensity.adaptivePlatformDensity,
-      
-      appBarTheme: AppBarTheme(
-        backgroundColor: Colors.blue[600],
-        foregroundColor: Colors.white,
-        elevation: 2,
-      ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.blue[600],
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-          animationDuration: AppConfig.animationDuration,
-        ),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.blue[600]!, width: 2),
-        ),
-      ),
-      
-      // Optimize animations
-      pageTransitionsTheme: const PageTransitionsTheme(
-        builders: {
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+            // Performance optimizations
+            builder: (context, child) {
+              return child!;
+            },
+            
+            theme: themeProvider.lightTheme,
+            darkTheme: themeProvider.darkTheme,
+            themeMode: themeProvider.themeMode,
+            home: Consumer<app_auth.AuthProvider>(
+              builder: (context, authProvider, child) {
+                // Show loading while checking authentication state
+                if (authProvider.isLoading) {
+                  return const Scaffold(
+                    body: Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+                
+                // Navigate based on authentication state
+                return authProvider.isAuthenticated 
+                    ? const HomeScreen() 
+                    : const LoginScreen();
+              },
+            ),
+          );
         },
       ),
     );

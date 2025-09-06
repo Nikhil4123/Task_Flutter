@@ -44,6 +44,60 @@ class TaskAttachment {
   }
 }
 
+class Subtask {
+  final String id;
+  final String title;
+  final bool isCompleted;
+  final DateTime createdAt;
+  final DateTime? completedAt;
+
+  Subtask({
+    required this.id,
+    required this.title,
+    required this.isCompleted,
+    required this.createdAt,
+    this.completedAt,
+  });
+
+  factory Subtask.fromMap(Map<String, dynamic> map) {
+    return Subtask(
+      id: map['id'] ?? '',
+      title: map['title'] ?? '',
+      isCompleted: map['isCompleted'] ?? false,
+      createdAt: (map['createdAt'] as Timestamp).toDate(),
+      completedAt: map['completedAt'] != null
+          ? (map['completedAt'] as Timestamp).toDate()
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'isCompleted': isCompleted,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
+    };
+  }
+
+  Subtask copyWith({
+    String? id,
+    String? title,
+    bool? isCompleted,
+    DateTime? createdAt,
+    DateTime? completedAt,
+  }) {
+    return Subtask(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      isCompleted: isCompleted ?? this.isCompleted,
+      createdAt: createdAt ?? this.createdAt,
+      completedAt: completedAt ?? this.completedAt,
+    );
+  }
+}
+
 class Task {
   final String id;
   final String title;
@@ -55,11 +109,17 @@ class Task {
   final String userId;
   final List<String> tags;
   final List<TaskAttachment> attachments;
+  final List<Subtask> subtasks;
   final DateTime? completedAt;
   final DateTime updatedAt;
   final String? assignedTo; // For future team features
   final double? progress; // Task completion percentage (0.0 to 1.0)
   final String? category; // Task category for organization
+  final bool hasReminder;
+  final DateTime? reminderDate;
+  final String reminderType; // 'notification', etc.
+  final String? repeatOption; // 'none', 'daily', 'weekly', 'monthly', 'yearly'
+  final DateTime? nextDueDate; // For recurring tasks
 
   Task({
     required this.id,
@@ -72,11 +132,17 @@ class Task {
     required this.userId,
     required this.tags,
     required this.attachments,
+    required this.subtasks,
     this.completedAt,
     required this.updatedAt,
     this.assignedTo,
     this.progress,
     this.category,
+    this.hasReminder = false,
+    this.reminderDate,
+    this.reminderType = 'notification',
+    this.repeatOption,
+    this.nextDueDate,
   });
 
   // Create a new task
@@ -87,8 +153,14 @@ class Task {
     DateTime? dueDate,
     TaskPriority priority = TaskPriority.medium,
     List<String> tags = const [],
+    List<Subtask> subtasks = const [],
     String? category,
     double? progress,
+    bool hasReminder = false,
+    DateTime? reminderDate,
+    String reminderType = 'notification',
+    String? repeatOption,
+    DateTime? nextDueDate,
   }) {
     final now = DateTime.now();
     return Task(
@@ -102,9 +174,15 @@ class Task {
       userId: userId,
       tags: tags,
       attachments: [],
+      subtasks: subtasks,
       updatedAt: now,
       category: category,
       progress: progress ?? 0.0,
+      hasReminder: hasReminder,
+      reminderDate: reminderDate,
+      reminderType: reminderType,
+      repeatOption: repeatOption,
+      nextDueDate: nextDueDate,
     );
   }
 
@@ -132,6 +210,9 @@ class Task {
       attachments: (data['attachments'] as List<dynamic>? ?? [])
           .map((attachment) => TaskAttachment.fromMap(attachment as Map<String, dynamic>))
           .toList(),
+      subtasks: (data['subtasks'] as List<dynamic>? ?? [])
+          .map((subtask) => Subtask.fromMap(subtask as Map<String, dynamic>))
+          .toList(),
       completedAt: data['completedAt'] != null 
           ? (data['completedAt'] as Timestamp).toDate() 
           : null,
@@ -141,6 +222,15 @@ class Task {
       assignedTo: data['assignedTo'],
       progress: (data['progress'] as num?)?.toDouble() ?? 0.0,
       category: data['category'],
+      hasReminder: data['hasReminder'] ?? false,
+      reminderDate: data['reminderDate'] != null
+          ? (data['reminderDate'] as Timestamp).toDate()
+          : null,
+      reminderType: data['reminderType'] ?? 'notification',
+      repeatOption: data['repeatOption'],
+      nextDueDate: data['nextDueDate'] != null
+          ? (data['nextDueDate'] as Timestamp).toDate()
+          : null,
     );
   }
 
@@ -156,11 +246,17 @@ class Task {
       'userId': userId,
       'tags': tags,
       'attachments': attachments.map((attachment) => attachment.toMap()).toList(),
+      'subtasks': subtasks.map((subtask) => subtask.toMap()).toList(),
       'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
       'updatedAt': Timestamp.fromDate(updatedAt),
       'assignedTo': assignedTo,
       'progress': progress ?? 0.0,
       'category': category,
+      'hasReminder': hasReminder,
+      'reminderDate': reminderDate != null ? Timestamp.fromDate(reminderDate!) : null,
+      'reminderType': reminderType,
+      'repeatOption': repeatOption,
+      'nextDueDate': nextDueDate != null ? Timestamp.fromDate(nextDueDate!) : null,
     };
   }
 
@@ -176,11 +272,17 @@ class Task {
     String? userId,
     List<String>? tags,
     List<TaskAttachment>? attachments,
+    List<Subtask>? subtasks,
     DateTime? completedAt,
     DateTime? updatedAt,
     String? assignedTo,
     double? progress,
     String? category,
+    bool? hasReminder,
+    DateTime? reminderDate,
+    String? reminderType,
+    String? repeatOption,
+    DateTime? nextDueDate,
   }) {
     return Task(
       id: id ?? this.id,
@@ -193,11 +295,17 @@ class Task {
       userId: userId ?? this.userId,
       tags: tags ?? this.tags,
       attachments: attachments ?? this.attachments,
+      subtasks: subtasks ?? this.subtasks,
       completedAt: completedAt ?? this.completedAt,
       updatedAt: updatedAt ?? DateTime.now(),
       assignedTo: assignedTo ?? this.assignedTo,
       progress: progress ?? this.progress,
       category: category ?? this.category,
+      hasReminder: hasReminder ?? this.hasReminder,
+      reminderDate: reminderDate ?? this.reminderDate,
+      reminderType: reminderType ?? this.reminderType,
+      repeatOption: repeatOption ?? this.repeatOption,
+      nextDueDate: nextDueDate ?? this.nextDueDate,
     );
   }
 
@@ -222,6 +330,18 @@ class Task {
     final now = DateTime.now();
     final difference = dueDate!.difference(now);
     return difference.inHours <= 24 && difference.inHours > 0;
+  }
+
+  // Calculate subtask completion progress
+  double get subtaskProgress {
+    if (subtasks.isEmpty) return 0.0;
+    final completedSubtasks = subtasks.where((subtask) => subtask.isCompleted).length;
+    return completedSubtasks / subtasks.length;
+  }
+
+  // Get completed subtasks count
+  int get completedSubtasksCount {
+    return subtasks.where((subtask) => subtask.isCompleted).length;
   }
 
   @override

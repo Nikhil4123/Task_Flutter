@@ -104,10 +104,8 @@ lib/
 ### 📱 Supported Platforms
 - ✅ Android
 - ✅ iOS  
-- ✅ Web
 - ✅ Windows
-- ✅ macOS
-- ✅ Linux
+
 
 ## 🔧 Development
 

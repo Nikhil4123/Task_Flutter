@@ -36,39 +36,39 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCyhvqCEnBxS1qmf6SPypzhGU2rLE_5fxo',
-    appId: '1:446982167094:web:27a46c6d742c826666d697',
-    messagingSenderId: '446982167094',
-    projectId: 'todo-78efd',
-    authDomain: 'todo-78efd.firebaseapp.com',
-    databaseURL: 'https://todo-78efd-default-rtdb.asia-southeast1.firebasedatabase.app',
-    storageBucket: 'todo-78efd.firebasestorage.app',
-    measurementId: 'G-Y1T56FVLDE',
+    apiKey: 'YOUR_WEB_API_KEY',
+    appId: 'YOUR_WEB_APP_ID',
+    messagingSenderId: 'YOUR_SENDER_ID',
+    projectId: 'YOUR_PROJECT_ID',
+    authDomain: 'YOUR_PROJECT_ID.firebaseapp.com',
+    databaseURL: 'https://YOUR_DB_URL.firebaseio.com',
+    storageBucket: 'YOUR_PROJECT_ID.appspot.com',
+    measurementId: 'YOUR_MEASUREMENT_ID',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyARuA8EzPF4TdOaQRd8_TkGNIbSWM1PHlQ',
-    appId: '1:446982167094:android:b7cabb146532ee2c66d697',
-    messagingSenderId: '446982167094',
-    projectId: 'todo-78efd',
-    databaseURL: 'https://todo-78efd-default-rtdb.asia-southeast1.firebasedatabase.app',
-    storageBucket: 'todo-78efd.firebasestorage.app',
+    apiKey: 'YOUR_ANDROID_API_KEY',
+    appId: 'YOUR_ANDROID_APP_ID',
+    messagingSenderId: 'YOUR_SENDER_ID',
+    projectId: 'YOUR_PROJECT_ID',
+    databaseURL: 'https://YOUR_DB_URL.firebaseio.com',
+    storageBucket: 'YOUR_PROJECT_ID.appspot.com',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAJvHutUPs4pSI6-PUzjZ-CeuVLxdfbHBw',
-    appId: '1:446982167094:ios:e4ae5035bc5d2e8866d697',
-    messagingSenderId: '446982167094',
-    projectId: 'todo-78efd',
-    databaseURL: 'https://todo-78efd-default-rtdb.asia-southeast1.firebasedatabase.app',
-    storageBucket: 'todo-78efd.firebasestorage.app',
-    iosBundleId: 'com.nikh.taskmanager',
+    apiKey: 'YOUR_IOS_API_KEY',
+    appId: 'YOUR_IOS_APP_ID',
+    messagingSenderId: 'YOUR_SENDER_ID',
+    projectId: 'YOUR_PROJECT_ID',
+    databaseURL: 'https://YOUR_DB_URL.firebaseio.com',
+    storageBucket: 'YOUR_PROJECT_ID.appspot.com',
+    iosBundleId: 'com.example.taskmanager',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'YOUR_MACOS_API_KEY',
     appId: 'YOUR_MACOS_APP_ID',
-    messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
+    messagingSenderId: 'YOUR_SENDER_ID',
     projectId: 'YOUR_PROJECT_ID',
     storageBucket: 'YOUR_PROJECT_ID.appspot.com',
     iosBundleId: 'com.example.taskmanager',
@@ -77,7 +77,7 @@ class DefaultFirebaseOptions {
   static const FirebaseOptions windows = FirebaseOptions(
     apiKey: 'YOUR_WINDOWS_API_KEY',
     appId: 'YOUR_WINDOWS_APP_ID',
-    messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
+    messagingSenderId: 'YOUR_SENDER_ID',
     projectId: 'YOUR_PROJECT_ID',
     authDomain: 'YOUR_PROJECT_ID.firebaseapp.com',
     storageBucket: 'YOUR_PROJECT_ID.appspot.com',

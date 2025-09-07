@@ -61,8 +61,17 @@ flutter pub get
 ```
 
 3. **Firebase Setup**
-   - Follow the [Deployment Guide](DEPLOYMENT_GUIDE.md) for complete Firebase configuration
-   - Update `lib/firebase_options.dart` with your project credentials
+   - Create a Firebase project and register your apps (Android/iOS/Web)
+   - Download platform configs and place them locally (do not commit):
+     - Android: `android/app/google-services.json`
+     - iOS: `ios/Runner/GoogleService-Info.plist`
+   - Update `lib/firebase_options.dart` with your own keys (placeholders committed)
+   - Alternatively, generate `firebase_options.dart` via FlutterFire CLI:
+     ```bash
+     dart pub global activate flutterfire_cli
+     flutterfire configure --project=<your-project-id> --platforms=android,ios,web
+     ```
+   - Example file provided: `android/app/google-services.example.json`
 
 4. **Run the application**
 ```bash
